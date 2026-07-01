@@ -1,12 +1,12 @@
 {
   "name": "auto-commit-message",
   "displayName": "Auto Commit Message",
-  "description": "Deep analyze git changes and generate detailed conventional commit messages",
-  "version": "1.2.0",
+  "description": "AI-powered conventional commit message generator with live status bar counter",
+  "version": "2.0.0",
   "publisher": "autocommit",
   "license": "MIT",
   "engines": {
-    "vscode": "^1.85.0"
+    "vscode": "^1.97.0"
   },
   "categories": [
     "SCM Providers",
@@ -17,7 +17,8 @@
     "commit",
     "message",
     "conventional-commits",
-    "auto-generate"
+    "auto-generate",
+    "status-bar"
   ],
   "activationEvents": [
     "onStartupFinished"
@@ -29,7 +30,13 @@
         "command": "auto-commit-message.generateMessage",
         "title": "Generate Commit Message",
         "category": "Auto Commit",
-        "icon": "$(sparkle)"
+        "icon": "$(git-commit)"
+      },
+      {
+        "command": "auto-commit-message.stageAllAndCommit",
+        "title": "Stage All & Generate Commit Message",
+        "category": "Auto Commit",
+        "icon": "$(check-all)"
       }
     ],
     "menus": {
@@ -40,11 +47,14 @@
           "group": "navigation@1"
         }
       ],
-      "scm/sourceControl": [
+      "commandPalette": [
         {
           "command": "auto-commit-message.generateMessage",
-          "when": "scmProvider == git",
-          "group": "inline@1"
+          "when": "workspaceHasConfiguration"
+        },
+        {
+          "command": "auto-commit-message.stageAllAndCommit",
+          "when": "workspaceHasConfiguration"
         }
       ]
     },
@@ -54,12 +64,22 @@
         "autoCommitMessage.useEmoji": {
           "type": "boolean",
           "default": false,
-          "description": "Include emoji in commit messages"
+          "description": "Include emoji prefix in commit messages (e.g. ✨ feat: add widget)"
         },
         "autoCommitMessage.maxLength": {
           "type": "number",
           "default": 72,
-          "description": "Maximum length of the commit message"
+          "description": "Maximum character length for the commit subject line"
+        },
+        "autoCommitMessage.showStatusBarCount": {
+          "type": "boolean",
+          "default": true,
+          "description": "Show change count in the status bar button"
+        },
+        "autoCommitMessage.autoStageOnGenerate": {
+          "type": "boolean",
+          "default": false,
+          "description": "Automatically stage all changes when generating a commit message"
         }
       }
     }
@@ -71,9 +91,9 @@
     "package": "vsce package"
   },
   "devDependencies": {
-    "@types/vscode": "1.85.0",
     "@types/node": "20.10.0",
-    "typescript": "^5.3.2",
-    "@vscode/vsce": "^2.22.0"
+    "@types/vscode": "^1.97.0",
+    "@vscode/vsce": "^2.22.0",
+    "typescript": "^5.3.2"
   }
 }
