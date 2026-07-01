@@ -33,14 +33,14 @@ const COMMIT_TYPES: CommitType[] = [
     {
         type: 'docs',
         description: 'Documentation changes',
-        keywords: ['document', 'readme', 'doc', 'comment', 'guide', 'manual', 'wiki'],
+        keywords: ['document', 'readme', 'doc', 'comment', 'guide', 'manual', 'wiki', 'md'],
         emoji: '📝',
         priority: 2
     },
     {
         type: 'style',
         description: 'Code style changes',
-        keywords: ['style', 'format', 'indent', 'whitespace', 'lint', 'prettify', 'beautify'],
+        keywords: ['style', 'format', 'indent', 'whitespace', 'lint', 'prettify', 'beautify', 'css'],
         emoji: '💄',
         priority: 3
     },
@@ -82,7 +82,7 @@ const COMMIT_TYPES: CommitType[] = [
     {
         type: 'chore',
         description: 'Other changes',
-        keywords: ['chore', 'update', 'upgrade', 'bump', 'version', 'release', 'config', 'setting', 'misc'],
+        keywords: ['chore', 'update', 'upgrade', 'bump', 'version', 'release', 'config', 'setting', 'misc', 'change', 'modify'],
         emoji: '🔧',
         priority: 4
     },
@@ -104,7 +104,10 @@ interface FileChange {
 
 export function activate(context: vscode.ExtensionContext) {
     console.log('Auto Commit Message extension is now active');
-
+    
+    // Show activation message
+    vscode.window.showInformationMessage('Auto Commit Message extension activated! Look for the ✨ button in Source Control.');
+    
     const disposable = vscode.commands.registerCommand(
         'auto-commit-message.generateMessage',
         async () => {
@@ -125,48 +128,108 @@ async function generateAndInsertCommitMessage(): Promise<void> {
     const workspaceFolders = vscode.workspace.workspaceFolders;
     
     if (!workspaceFolders || workspaceFolders.length === 0) {
+        vscode.window.showErrorMessage('Auto Commit: No workspace folder is open.');
         throw new Error('No workspace folder is open.');
     }
 
     const workspaceRoot = workspaceFolders[0].uri.fsPath;
+    console.log('Workspace root:', workspaceRoot);
     
     // Check if this is a git repository
-    if (!fs.existsSync(path.join(workspaceRoot, '.git'))) {
+    const gitDir = path.join(workspaceRoot, '.git');
+    if (!fs.existsSync(gitDir)) {
+        vscode.window.showErrorMessage('Auto Commit: The workspace is not a Git repository. Please open a Git repository.');
         throw new Error('The workspace is not a Git repository.');
     }
 
-    // Get staged changes first, fall back to unstaged changes
-    let diff: string;
-    let hasStagedChanges = true;
+    // Try to get changes using multiple methods
+    let hasChanges = false;
+    let diff = '';
     
+    // Method 1: Check staged changes
     try {
-        diff = await executeGitCommand(workspaceRoot, 'git diff --staged --unified=5');
-        if (!diff.trim()) {
-            diff = await executeGitCommand(workspaceRoot, 'git diff --unified=5');
-            hasStagedChanges = false;
+        console.log('Checking staged changes...');
+        diff = await executeGitCommand(workspaceRoot, 'git diff --cached --name-status');
+        if (diff.trim()) {
+            hasChanges = true;
+            console.log('Found staged changes:', diff);
+            diff = await executeGitCommand(workspaceRoot, 'git diff --cached --unified=5');
         }
     } catch (error) {
-        throw new Error('Failed to get git diff. Make sure git is installed and available in PATH.');
+        console.log('Error checking staged changes:', error);
     }
 
-    if (!diff.trim()) {
-        vscode.window.showInformationMessage('No changes to generate a commit message.');
+    // Method 2: If no staged changes, check unstaged changes
+    if (!hasChanges) {
+        try {
+            console.log('Checking unstaged changes...');
+            diff = await executeGitCommand(workspaceRoot, 'git diff --name-status');
+            if (diff.trim()) {
+                hasChanges = true;
+                console.log('Found unstaged changes:', diff);
+                diff = await executeGitCommand(workspaceRoot, 'git diff --unified=5');
+            }
+        } catch (error) {
+            console.log('Error checking unstaged changes:', error);
+        }
+    }
+
+    // Method 3: Check untracked files
+    if (!hasChanges) {
+        try {
+            console.log('Checking untracked files...');
+            const untracked = await executeGitCommand(workspaceRoot, 'git ls-files --others --exclude-standard');
+            if (untracked.trim()) {
+                hasChanges = true;
+                console.log('Found untracked files:', untracked);
+                diff = `Untracked files:\n${untracked}`;
+            }
+        } catch (error) {
+            console.log('Error checking untracked files:', error);
+        }
+    }
+
+    // Method 4: Check git status as last resort
+    if (!hasChanges) {
+        try {
+            console.log('Checking git status...');
+            const status = await executeGitCommand(workspaceRoot, 'git status --porcelain');
+            if (status.trim()) {
+                hasChanges = true;
+                console.log('Found changes in status:', status);
+                diff = `Git Status:\n${status}`;
+            }
+        } catch (error) {
+            console.log('Error checking git status:', error);
+        }
+    }
+
+    if (!hasChanges || !diff.trim()) {
+        vscode.window.showInformationMessage('Auto Commit: No changes detected. Make some changes to your files first!');
+        console.log('No changes found in repository');
         return;
     }
 
     // Parse the diff to extract meaningful information
     const changes = parseGitDiff(diff);
-    const message = generateCommitMessage(changes, diff, hasStagedChanges);
+    console.log('Parsed changes:', changes);
+    
+    const message = generateCommitMessage(changes, diff);
+    console.log('Generated message:', message);
     
     // Insert the message into the SCM input box
     await insertIntoSCMInput(message);
     
-    vscode.window.showInformationMessage(`Commit message generated: "${message}"`);
+    vscode.window.showInformationMessage(`✅ Generated commit message: "${message}"`);
 }
 
 async function executeGitCommand(cwd: string, command: string): Promise<string> {
     try {
-        const { stdout, stderr } = await exec(command, { cwd });
+        console.log(`Executing: ${command}`);
+        const { stdout, stderr } = await exec(command, { 
+            cwd,
+            maxBuffer: 1024 * 1024 * 10 // 10MB buffer
+        });
         
         if (stderr && !stderr.includes('warning:')) {
             console.warn('Git command warning:', stderr);
@@ -174,6 +237,7 @@ async function executeGitCommand(cwd: string, command: string): Promise<string> 
         
         return stdout;
     } catch (error: any) {
+        console.error(`Git command failed: ${command}`, error);
         if (error.stderr) {
             throw new Error(error.stderr.trim());
         }
@@ -183,6 +247,41 @@ async function executeGitCommand(cwd: string, command: string): Promise<string> 
 
 function parseGitDiff(diff: string): FileChange[] {
     const changes: FileChange[] = [];
+    
+    // If it's untracked files or status
+    if (diff.startsWith('Untracked files:') || diff.startsWith('Git Status:')) {
+        const lines = diff.split('\n').filter(line => line.trim());
+        for (let i = 1; i < lines.length; i++) {
+            const line = lines[i].trim();
+            if (line) {
+                let filePath = line;
+                let status = 'untracked';
+                
+                // Handle git status format
+                if (line.length > 3 && line[2] === ' ') {
+                    const statusCode = line.substring(0, 2).trim();
+                    filePath = line.substring(3).trim();
+                    
+                    if (statusCode === '??') status = 'untracked';
+                    else if (statusCode === 'A') status = 'added';
+                    else if (statusCode === 'M') status = 'modified';
+                    else if (statusCode === 'D') status = 'deleted';
+                    else if (statusCode === 'R') status = 'renamed';
+                    else status = 'modified';
+                }
+                
+                changes.push({
+                    filePath,
+                    status,
+                    additions: 1,
+                    deletions: 0
+                });
+            }
+        }
+        return changes;
+    }
+    
+    // Parse regular diff
     const lines = diff.split('\n');
     let currentFile: FileChange | null = null;
     let currentAdditions = 0;
@@ -236,14 +335,20 @@ function parseGitDiff(diff: string): FileChange[] {
         changes.push(currentFile);
     }
 
+    // If no changes were parsed but diff exists, create generic changes
+    if (changes.length === 0 && diff.trim()) {
+        changes.push({
+            filePath: 'files',
+            status: 'modified',
+            additions: 1,
+            deletions: 0
+        });
+    }
+
     return changes;
 }
 
-function generateCommitMessage(
-    changes: FileChange[],
-    diff: string,
-    hasStagedChanges: boolean
-): string {
+function generateCommitMessage(changes: FileChange[], diff: string): string {
     const config = vscode.workspace.getConfiguration('autoCommitMessage');
     const useEmoji = config.get<boolean>('useEmoji', false);
     const maxLength = config.get<number>('maxLength', 72);
@@ -313,7 +418,11 @@ function analyzeChanges(changes: FileChange[], diff: string): {
     // Sort by score descending
     scoredTypes.sort((a, b) => b.score - a.score);
     
-    const bestMatch = scoredTypes[0].commitType;
+    // Default to feat if no good match
+    let bestMatch = scoredTypes[0].commitType;
+    if (scoredTypes[0].score < 1) {
+        bestMatch = COMMIT_TYPES.find(t => t.type === 'chore') || bestMatch;
+    }
     
     // Generate description based on changes
     const description = generateDescription(changes, keywords, bestMatch.type);
@@ -331,16 +440,21 @@ function analyzeChanges(changes: FileChange[], diff: string): {
 
 function extractKeywords(changes: FileChange[], diff: string): Set<string> {
     const keywords = new Set<string>();
-    const contentWords = new Set<string>();
     
     // Extract words from file paths
     for (const change of changes) {
-        const pathParts = change.filePath.toLowerCase().split(/[\/\\\-_.]/);
+        const filePath = change.filePath.toLowerCase();
+        const pathParts = filePath.split(/[\/\\\-_.]/);
         for (const part of pathParts) {
-            if (part.length > 2) {
+            if (part.length > 1) {
                 keywords.add(part);
-                contentWords.add(part);
             }
+        }
+        
+        // Add file extension as keyword
+        const ext = path.extname(change.filePath).toLowerCase();
+        if (ext) {
+            keywords.add(ext.replace('.', ''));
         }
         
         // Add status-based keywords
@@ -357,40 +471,32 @@ function extractKeywords(changes: FileChange[], diff: string): Set<string> {
                 keywords.add('rename');
                 keywords.add('move');
                 break;
+            case 'untracked':
+                keywords.add('add');
+                keywords.add('new');
+                break;
         }
     }
     
-    // Extract words from the diff content (lines that were added)
-    const addedLines = diff.split('\n')
-        .filter(line => line.startsWith('+') && !line.startsWith('+++'))
-        .map(line => line.substring(1).trim())
-        .filter(line => line.length > 0 && !line.startsWith('//') && !line.startsWith('#'));
-    
-    // Common programming keywords to look for
-    const codeKeywords = [
-        'function', 'class', 'method', 'variable', 'import', 'export',
-        'return', 'async', 'await', 'const', 'let', 'var', 'type',
-        'interface', 'enum', 'component', 'module', 'service', 'util',
-        'api', 'route', 'controller', 'model', 'view', 'style',
-        'button', 'input', 'form', 'page', 'layout', 'header', 'footer',
-        'login', 'auth', 'user', 'data', 'config', 'error', 'log',
-        'validate', 'parse', 'format', 'convert', 'transform', 'merge'
-    ];
-    
-    for (const line of addedLines) {
-        const words = line.split(/[\s\-_.{}()[\];:'",<>/\\|`~!@#$%^&*+=]+/);
-        for (const word of words) {
-            const lower = word.toLowerCase();
-            if (lower.length > 2 && codeKeywords.includes(lower)) {
-                keywords.add(lower);
-            }
-            if (word.match(/^[A-Z][a-z]+/)) {
-                keywords.add(lower);
-                contentWords.add(lower);
+    // Extract words from the diff content
+    if (diff && !diff.startsWith('Untracked files:') && !diff.startsWith('Git Status:')) {
+        const addedLines = diff.split('\n')
+            .filter(line => line.startsWith('+') && !line.startsWith('+++'))
+            .map(line => line.substring(1).trim())
+            .filter(line => line.length > 0);
+        
+        for (const line of addedLines) {
+            const words = line.split(/[\s\-_.{}()[\];:'",<>/\\|`~!@#$%^&*+=]+/);
+            for (const word of words) {
+                const lower = word.toLowerCase();
+                if (lower.length > 2) {
+                    keywords.add(lower);
+                }
             }
         }
     }
     
+    console.log('Extracted keywords:', Array.from(keywords));
     return keywords;
 }
 
@@ -404,43 +510,43 @@ function analyzeFilePatterns(changes: FileChange[]): {
     let ciScore = 0;
     
     for (const change of changes) {
-        const path = change.filePath.toLowerCase();
+        const filePath = change.filePath.toLowerCase();
         
         // Documentation patterns
-        if (path.match(/\.(md|txt|rst|adoc)$/) || 
-            path.includes('readme') || 
-            path.includes('docs/') ||
-            path.includes('documentation/')) {
+        if (filePath.match(/\.(md|txt|rst|adoc)$/) || 
+            filePath.includes('readme') || 
+            filePath.includes('docs/') ||
+            filePath.includes('documentation/')) {
             docScore += 3;
         }
         
         // Test patterns
-        if (path.includes('test') || 
-            path.includes('spec') || 
-            path.match(/\.(test|spec)\.(ts|js|jsx|tsx|py|java|go)$/)) {
+        if (filePath.includes('test') || 
+            filePath.includes('spec') || 
+            filePath.match(/\.(test|spec)\.(ts|js|jsx|tsx|py|java|go)$/)) {
             testScore += 3;
         }
         
         // Style patterns
-        if (path.match(/\.(css|scss|sass|less|styl)$/) ||
-            path.includes('.style') ||
-            path.includes('theme')) {
+        if (filePath.match(/\.(css|scss|sass|less|styl)$/) ||
+            filePath.includes('.style') ||
+            filePath.includes('theme')) {
             styleScore += 2;
         }
         
         // Build patterns
-        if (path.match(/(package\.json|yarn\.lock|package-lock\.json|pom\.xml|build\.gradle|Cargo\.toml)$/) ||
-            path.match(/\.(config|rc)\.(js|ts|json|yaml|yml)$/) ||
-            path.includes('webpack') || path.includes('babel')) {
+        if (filePath.match(/(package\.json|yarn\.lock|package-lock\.json|pom\.xml|build\.gradle|Cargo\.toml)$/) ||
+            filePath.match(/\.(config|rc)\.(js|ts|json|yaml|yml)$/) ||
+            filePath.includes('webpack') || filePath.includes('babel')) {
             buildScore += 3;
         }
         
         // CI patterns
-        if (path.includes('.github/') ||
-            path.includes('.gitlab/') ||
-            path.includes('jenkins') ||
-            path.includes('docker') ||
-            path.match(/^(Dockerfile|docker-compose\.yml|\.travis\.yml|\.drone\.yml)$/)) {
+        if (filePath.includes('.github/') ||
+            filePath.includes('.gitlab/') ||
+            filePath.includes('jenkins') ||
+            filePath.includes('docker') ||
+            filePath.match(/^(Dockerfile|docker-compose\.yml|\.travis\.yml|\.drone\.yml)$/)) {
             ciScore += 3;
         }
     }
@@ -464,11 +570,12 @@ function generateDescription(
     keywords: Set<string>,
     type: string
 ): string {
+    if (changes.length === 0) {
+        return 'update files';
+    }
+    
     // Generate a description based on the type and changes
     const fileNames = changes.map(c => path.basename(c.filePath, path.extname(c.filePath)));
-    const meaningfulKeywords = Array.from(keywords).filter(k => 
-        k.length > 3 && !['this', 'that', 'with', 'from', 'have', 'been', 'were'].includes(k)
-    );
     
     // Try to create a meaningful description
     if (changes.length === 1) {
@@ -478,17 +585,17 @@ function generateDescription(
         
         switch (type) {
             case 'feat':
-                return `${action} ${fileName.split('.')[0]}`;
+                return `${action} ${fileName}`;
             case 'fix':
-                return `${action} in ${fileName.split('.')[0]}`;
+                return `fix ${fileName}`;
             case 'docs':
                 return `${action} ${fileName}`;
             case 'style':
                 return `format ${fileName}`;
             case 'refactor':
-                return `refactor ${fileName.split('.')[0]}`;
+                return `refactor ${fileName}`;
             case 'test':
-                return `${action} tests for ${fileName.split('.')[0]}`;
+                return `${action} tests for ${fileName}`;
             case 'chore':
                 return `${action} ${fileName}`;
             default:
@@ -500,25 +607,35 @@ function generateDescription(
     const commonPath = findCommonPath(changes.map(c => c.filePath));
     
     if (commonPath && commonPath.length > 3) {
-        const action = changes.some(c => c.status === 'added') ? 'add' : 'update';
+        const action = changes.some(c => c.status === 'added' || c.status === 'untracked') ? 'add' : 'update';
         return `${action} ${commonPath} components`;
     }
     
-    // Fall back to keyword-based description
-    if (meaningfulKeywords.length >= 2) {
-        const action = changes.some(c => c.status === 'added') ? 'add' : 'update';
-        return `${action} ${meaningfulKeywords.slice(0, 2).join(' ')}`;
+    // Use the most common file extension or name
+    const extensions = changes.map(c => path.extname(c.filePath));
+    const mostCommonExt = extensions.sort((a, b) =>
+        extensions.filter(v => v === a).length - extensions.filter(v => v === b).length
+    ).pop() || '';
+    
+    if (mostCommonExt && mostCommonExt.length > 0) {
+        const action = changes.some(c => c.status === 'added' || c.status === 'untracked') ? 'add' : 'update';
+        return `${action} ${mostCommonExt.replace('.', '')} files`;
     }
     
-    // Generic description based on type
-    return `update ${changes.length} files`;
+    // Generic description based on type and file count
+    const action = changes.some(c => c.status === 'added' || c.status === 'untracked') ? 'add' : 'update';
+    return `${action} ${changes.length} files`;
 }
 
 function getActionForStatus(status: string, type: string): string {
     switch (status) {
-        case 'added': return 'add';
-        case 'deleted': return 'remove';
-        case 'renamed': return 'rename';
+        case 'added':
+        case 'untracked':
+            return 'add';
+        case 'deleted':
+            return 'remove';
+        case 'renamed':
+            return 'rename';
         case 'modified':
         default:
             return type === 'fix' ? 'fix' : 'update';
@@ -527,7 +644,10 @@ function getActionForStatus(status: string, type: string): string {
 
 function findCommonPath(paths: string[]): string | null {
     if (paths.length === 0) return null;
-    if (paths.length === 1) return path.dirname(paths[0]).split('/').pop() || null;
+    if (paths.length === 1) {
+        const dir = path.dirname(paths[0]);
+        return dir !== '.' ? dir.split('/').pop() || null : null;
+    }
     
     const parts = paths.map(p => p.split('/'));
     const minLength = Math.min(...parts.map(p => p.length));
@@ -553,17 +673,8 @@ function detectScope(changes: FileChange[]): string | null {
         const scope = commonPath.split('/').pop() || commonPath;
         // Only use as scope if it's a meaningful directory name
         if (scope && scope.length > 2 && 
-            !['src', 'lib', 'dist', 'build', 'public', 'assets'].includes(scope)) {
+            !['src', 'lib', 'dist', 'build', 'public', 'assets', '.'].includes(scope)) {
             return scope;
-        }
-    }
-    
-    // Try to detect scope from file names
-    if (changes.length === 1) {
-        const filePath = changes[0].filePath;
-        const dirName = path.dirname(filePath).split('/').pop();
-        if (dirName && dirName.length > 2 && dirName !== '.') {
-            return dirName;
         }
     }
     
@@ -571,8 +682,11 @@ function detectScope(changes: FileChange[]): string | null {
 }
 
 async function insertIntoSCMInput(message: string): Promise<void> {
-    // Try to use the Git extension API first
+    console.log('Inserting message into SCM:', message);
+    
+    // Try multiple methods to insert the message
     try {
+        // Method 1: Use the Git extension API
         const gitExtension = vscode.extensions.getExtension('vscode.git');
         
         if (gitExtension && gitExtension.isActive) {
@@ -581,31 +695,35 @@ async function insertIntoSCMInput(message: string): Promise<void> {
             if (gitApi && gitApi.repositories && gitApi.repositories.length > 0) {
                 const repo = gitApi.repositories[0];
                 repo.inputBox.value = message;
+                console.log('Message inserted via Git API');
                 return;
             }
         }
     } catch (error) {
-        console.warn('Could not use Git extension API, trying fallback method:', error);
+        console.warn('Method 1 failed:', error);
     }
     
-    // Fallback: Try to use the command to focus on SCM and set the message
+    // Method 2: Try SCM view provider
     try {
-        // Attempt to set the commit message via the SCM input box
+        const scmView = vscode.scm;
+        // Try to set through the active SCM provider
+        console.log('Trying SCM provider method');
         await vscode.commands.executeCommand('workbench.view.scm');
-        
-        // Try to find and set the input box
-        // This is a fallback and may not always work depending on VS Code version
-        await new Promise(resolve => setTimeout(resolve, 100));
-        
-        // Use the built-in command to set the commit message
-        await vscode.commands.executeCommand('git.commitAll', message);
-        
-    } catch (fallbackError) {
-        // If all else fails, show the message and copy to clipboard
+        await new Promise(resolve => setTimeout(resolve, 200));
+    } catch (error) {
+        console.warn('Method 2 failed:', error);
+    }
+    
+    // Method 3: Copy to clipboard as fallback
+    try {
         await vscode.env.clipboard.writeText(message);
         vscode.window.showInformationMessage(
-            `Generated message copied to clipboard: "${message}"`
+            `Generated message copied to clipboard: "${message}"\nPaste it in the commit message box (Ctrl+V).`
         );
+        console.log('Message copied to clipboard');
+    } catch (error) {
+        console.error('All methods failed:', error);
+        throw new Error('Could not insert commit message');
     }
 }
 

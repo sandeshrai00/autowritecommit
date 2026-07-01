@@ -1,0 +1,10 @@
+﻿.vscode/**
+.gitignore
+*.vsix
+*.log
+src/**
+test-*
+rebuild-*
+cleanup.ps1
+**/*.ts
+**/*.map
