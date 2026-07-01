@@ -1,14 +1,10 @@
 {
   "name": "auto-commit-message",
   "displayName": "Auto Commit Message",
-  "description": "Automatically generate conventional commit messages from git changes",
+  "description": "Generate conventional commit messages automatically from git changes",
   "version": "1.0.0",
   "publisher": "your-publisher-name",
   "license": "MIT",
-  "repository": {
-    "type": "git",
-    "url": "https://github.com/yourusername/auto-commit-message"
-  },
   "engines": {
     "vscode": "^1.85.0"
   },
@@ -31,9 +27,9 @@
     "commands": [
       {
         "command": "auto-commit-message.generateMessage",
-        "title": "Auto Commit: Generate Message",
+        "title": "Generate Commit Message",
         "category": "Auto Commit",
-        "icon": "$(sparkle)"
+        "icon": "$(git-commit)"
       }
     ],
     "menus": {
@@ -43,13 +39,6 @@
           "when": "scmProvider == git",
           "group": "navigation"
         }
-      ],
-      "scm/sourceControl": [
-        {
-          "command": "auto-commit-message.generateMessage",
-          "when": "scmProvider == git",
-          "group": "inline"
-        }
       ]
     },
     "configuration": {
@@ -58,12 +47,12 @@
         "autoCommitMessage.useEmoji": {
           "type": "boolean",
           "default": false,
-          "description": "Include emoji in commit messages (e.g., ✨ feat: add feature)"
+          "description": "Include emoji in commit messages"
         },
         "autoCommitMessage.maxLength": {
           "type": "number",
           "default": 72,
-          "description": "Maximum length of the commit message subject line"
+          "description": "Maximum length of the commit message"
         },
         "autoCommitMessage.includeScope": {
           "type": "boolean",
@@ -77,13 +66,11 @@
     "vscode:prepublish": "npm run compile",
     "compile": "tsc -p ./",
     "watch": "tsc -watch -p ./",
-    "pretest": "npm run compile",
-    "lint": "eslint src --ext ts",
     "package": "vsce package"
   },
   "devDependencies": {
-    "@types/vscode": "^1.85.0",
-    "@types/node": "^20.10.0",
+    "@types/vscode": "1.85.0",
+    "@types/node": "20.10.0",
     "typescript": "^5.3.2",
     "@vscode/vsce": "^2.22.0"
   }
