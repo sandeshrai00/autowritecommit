@@ -1,9 +1,9 @@
 {
   "name": "auto-commit-message",
   "displayName": "Auto Commit Message",
-  "description": "Generate conventional commit messages automatically from git changes",
-  "version": "1.0.0",
-  "publisher": "your-publisher-name",
+  "description": "Deep analyze git changes and generate detailed conventional commit messages",
+  "version": "1.2.0",
+  "publisher": "autocommit",
   "license": "MIT",
   "engines": {
     "vscode": "^1.85.0"
@@ -29,7 +29,7 @@
         "command": "auto-commit-message.generateMessage",
         "title": "Generate Commit Message",
         "category": "Auto Commit",
-        "icon": "$(git-commit)"
+        "icon": "$(sparkle)"
       }
     ],
     "menus": {
@@ -37,7 +37,14 @@
         {
           "command": "auto-commit-message.generateMessage",
           "when": "scmProvider == git",
-          "group": "navigation"
+          "group": "navigation@1"
+        }
+      ],
+      "scm/sourceControl": [
+        {
+          "command": "auto-commit-message.generateMessage",
+          "when": "scmProvider == git",
+          "group": "inline@1"
         }
       ]
     },
@@ -53,11 +60,6 @@
           "type": "number",
           "default": 72,
           "description": "Maximum length of the commit message"
-        },
-        "autoCommitMessage.includeScope": {
-          "type": "boolean",
-          "default": false,
-          "description": "Try to detect and include commit scope"
         }
       }
     }
