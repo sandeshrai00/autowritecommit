@@ -1,0 +1,90 @@
+{
+  "name": "auto-commit-message",
+  "displayName": "Auto Commit Message",
+  "description": "Automatically generate conventional commit messages from git changes",
+  "version": "1.0.0",
+  "publisher": "your-publisher-name",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/yourusername/auto-commit-message"
+  },
+  "engines": {
+    "vscode": "^1.85.0"
+  },
+  "categories": [
+    "SCM Providers",
+    "Other"
+  ],
+  "keywords": [
+    "git",
+    "commit",
+    "message",
+    "conventional-commits",
+    "auto-generate"
+  ],
+  "activationEvents": [
+    "onStartupFinished"
+  ],
+  "main": "./out/extension.js",
+  "contributes": {
+    "commands": [
+      {
+        "command": "auto-commit-message.generateMessage",
+        "title": "Auto Commit: Generate Message",
+        "category": "Auto Commit",
+        "icon": "$(sparkle)"
+      }
+    ],
+    "menus": {
+      "scm/title": [
+        {
+          "command": "auto-commit-message.generateMessage",
+          "when": "scmProvider == git",
+          "group": "navigation"
+        }
+      ],
+      "scm/sourceControl": [
+        {
+          "command": "auto-commit-message.generateMessage",
+          "when": "scmProvider == git",
+          "group": "inline"
+        }
+      ]
+    },
+    "configuration": {
+      "title": "Auto Commit Message",
+      "properties": {
+        "autoCommitMessage.useEmoji": {
+          "type": "boolean",
+          "default": false,
+          "description": "Include emoji in commit messages (e.g., ✨ feat: add feature)"
+        },
+        "autoCommitMessage.maxLength": {
+          "type": "number",
+          "default": 72,
+          "description": "Maximum length of the commit message subject line"
+        },
+        "autoCommitMessage.includeScope": {
+          "type": "boolean",
+          "default": false,
+          "description": "Try to detect and include commit scope"
+        }
+      }
+    }
+  },
+  "scripts": {
+    "vscode:prepublish": "npm run compile",
+    "compile": "tsc -p ./",
+    "watch": "tsc -watch -p ./",
+    "pretest": "npm run compile",
+    "lint": "eslint src --ext ts",
+    "package": "vsce package"
+  },
+  "devDependencies": {
+    "@types/vscode": "^1.85.0",
+    "@types/node": "^20.10.0",
+    "typescript": "^5.3.2",
+    "@vscode/vsce": "^2.22.0"
+  }
+}
